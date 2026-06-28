@@ -1,60 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
-import time
+import os
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
 import cv2
-import signal
-from pyzbar import pyzbar
+from flask import Flask, Response
 
+app = Flask(__name__)
 running = True
-last_qr_data = None
 
-def signal_handler(sig, frame):
-    """
-    ctrl+cを受け取ったら呼び出される
-    running フラグを False に設定し、メインループを終了する
-    """
-    global running
-    print("\nSignal received, shutting down...")
-    running = False
+camera = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L2)
+camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480) 
 
-def main():
-    """
-    カメラから映像を取得し、ウィンドウに表示するメイン関数
-    """
-
-    global running, last_qr_data
-
-    print("camera monitor starting...\n")
-
-    #１．シグナルハンドラの設定
-    #ctrl+cを受け取ったら signal_handler() が呼ばれる
-    signal.signal(signal.SIGINT, signal_handler)
-
-    #２．メインループ
-    #カメラからフレームをキャプチャし、ウィンドウに表示
-    while running:
-        camera = cv2.VideoCapture(0)
-        
-        if not camera.isOpened():
-            print("Error: Could not open camera")
-            break
-
+def generate_frames():
+    while True:
         ret, frame = camera.read()
-
-        if ret == True:
-            cv2.imshow("camera monitor", frame)
-
-        else:
-            print("Error: Could not read frame from camera")
+        if not ret:
             break
+        # フレームをJPEGにエンコード
+        ok, buffer = cv2.imencode('.jpg', frame)
+        if not ok:
+            continue
+        jpg = buffer.tobytes()
+        # 境界線 + ヘッダ + JPEG本体 を yield で送り続ける
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + jpg + b'\r\n')
 
-        time.sleep(0.1)
+@app.route('/')
+def index():
+    # img タグの src にストリームを指定するだけで表示される
+    return '<html><body><img src="/video"></body></html>'
 
-    print("\nmonitor shutting down...")
-    camera.release()
-    cv2.destroyAllWindows()
+@app.route('/video')
+def video():
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == '__main__':
+    # 0.0.0.0 で全インターフェース待受（VNC内ブラウザから見るなら localhost でも可）
+    app.run(host='0.0.0.0', port=8000, threaded=True)

@@ -137,7 +137,7 @@ def classify_color(frame, x1, y1, x2, y2):
             best_color, best_count = color, count
     return best_color, best_count
 
-camera = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L2)
+camera = cv2.VideoCapture("/dev/video1", cv2.CAP_V4L2)
 camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
 camera.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_W)
 camera.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_H)
